@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "app-deploy",
-    "slug": "app-deploy",
+    "slug": "appdeploy",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -36,6 +36,15 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "d6bf442d-dc9b-4c0e-9db9-9a6b648c2dfa"
+      }
+    },
+    "owner": "teeuguima"
   }
 }
