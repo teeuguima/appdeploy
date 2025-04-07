@@ -44,3 +44,8 @@ jobs:
       - store_artifacts:
           path: dist
           destination: apk
+
+workflows:
+  build-and-export:
+    jobs:
+      - build-apk
