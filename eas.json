@@ -1,0 +1,8 @@
+{
+    "build": {
+        "local": {
+            "developmentClient": false,
+            "distribution": "internal"
+        }
+    }
+}

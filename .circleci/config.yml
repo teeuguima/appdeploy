@@ -1,36 +1,46 @@
-# .circleci/config.yml
 version: 2.1
 
 executors:
-  node-executor:
+  android-eas:
     docker:
       - image: cimg/node:18.19
+    working_directory: ~/project
 
 jobs:
-  build-android:
-    executor: node-executor
-    working_directory: ~/project
+  build-apk:
+    executor: android-eas
     steps:
       - checkout
 
       - run:
-          name: Install dependencies
-          command: npm install
+          name: Instala dependências
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y openjdk-11-jdk
+            curl -sSL https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -o cmdline-tools.zip
+            unzip cmdline-tools.zip
+            mkdir -p $HOME/android-sdk/cmdline-tools
+            mv cmdline-tools $HOME/android-sdk/cmdline-tools/latest
+            export ANDROID_HOME=$HOME/android-sdk
+            export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator
+            yes | sdkmanager --sdk_root=$ANDROID_HOME --licenses
+            sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "platforms;android-33" "build-tools;33.0.2"
 
       - run:
-          name: Install EAS CLI
+          name: Instala EAS CLI
           command: npm install -g eas-cli
 
       - run:
-          name: Authenticate with Expo
-          command: eas whoami || eas login --token $EXPO_TOKEN
+          name: Faz build do APK localmente
+          command: |
+            export ANDROID_HOME=$HOME/android-sdk
+            eas build --platform android --profile local --local
 
-      - run:
-          name: Build Android app
-          command: eas build --platform android --non-interactive
+      - persist_to_workspace:
+          root: .
+          paths:
+            - dist
 
-workflows:
-  version: 2
-  build:
-    jobs:
-      - build-android
+      - store_artifacts:
+          path: dist
+          destination: apk
