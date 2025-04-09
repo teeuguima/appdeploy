@@ -1,53 +1,46 @@
 version: 2.1
 
 executors:
-  android-eas:
+  android-executor:
     docker:
-      - image: cimg/node:18.19
+      - image: cimg/android:2023.10
     working_directory: ~/project
 
 jobs:
-  build-apk:
-    executor: android-eas
-    environment:
-      ANDROID_SDK_ROOT: /opt/android-sdk
-      ANDROID_HOME: /opt/android-sdk
-      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+  build-android:
+    executor: android-executor
     steps:
       - checkout
 
-      - run:
-          name: Instalar dependências (Java, unzip, curl)
-          command: |
-            sudo apt-get update
-            sudo apt-get install -y openjdk-17-jdk unzip curl
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ checksum "package-lock.json" }}
+            - v1-dependencies-
 
       - run:
-          name: Configurar Android SDK
-          command: |
-            sudo mkdir -p /opt/android-sdk/cmdline-tools
-            curl -sSL https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -o cmdline-tools.zip
-            unzip -q cmdline-tools.zip -d /tmp/cmdline-tools
-            sudo mv /tmp/cmdline-tools/cmdline-tools /opt/android-sdk/cmdline-tools/latest
-            export PATH=$PATH:/opt/android-sdk/cmdline-tools/latest/bin
-            yes | sdkmanager --sdk_root=${ANDROID_SDK_ROOT} --licenses || true
-            sdkmanager --sdk_root=${ANDROID_SDK_ROOT} "platform-tools" "platforms;android-33" "build-tools;33.0.2"
+          name: Install Node dependencies
+          command: npm ci
 
       - run:
-          name: Instalar EAS CLI
-          command: npm install -g eas-cli
+          name: Install Java dependencies
+          command: ./gradlew dependencies
+
+      - save_cache:
+          paths:
+            - ~/.gradle
+            - node_modules
+          key: v1-dependencies-{{ checksum "package-lock.json" }}
 
       - run:
-          name: Build APK com EAS (local)
-          command: |
-            export PATH=$PATH:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools
-            eas build --platform android --profile preview --local --output=./apk
+          name: Build Android Release APK
+          command: cd android && ./gradlew assembleRelease
 
       - store_artifacts:
-          path: apk
-          destination: apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          destination: release-apk
 
 workflows:
-  build-and-export:
+  version: 2
+  build:
     jobs:
-      - build-apk
+      - build-android
