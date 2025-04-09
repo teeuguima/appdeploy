@@ -1,12 +1,55 @@
 version: 2.1
 
-executors:
-  android-executor:
-    docker:
-      - image: cimg/android:2023.10
-    working_directory: ~/project
-
 jobs:
+  node:
+    working_directory: ~/app-deploy
+    docker:
+      - image: cimg/node:18.20.4
+
+    steps:
+      - checkout
+
+      - restore_cache:
+          keys:
+            - v1-yarn-dependencies-{{ checksum "yarn.lock" }}
+            - v1-yarn-dependencies-
+
+      - run:
+          name: Install AWS CLI and jq
+          command: |
+            sudo apt-get update && sudo apt-get install -y awscli jq
+
+      - run:
+          name: Fetch Environment Variables from AWS Secrets Manager
+          command: |
+            aws secretsmanager get-secret-value \
+              --secret-id $AWS_SECRET_NAME \
+              --region $AWS_REGION \
+              --query SecretString \
+              --output text > secrets.json
+            jq -r 'to_entries | .[] | "\(.key)=\(.value)"' secrets.json > ~/app-deploy/.env
+
+      - run:
+          name: Export Environment Variables
+          command: cat ~/app-deploy/.env >> $BASH_ENV
+
+      - run:
+          name: Install Yarn Dependencies
+          command: yarn install --frozen-lockfile
+
+      - save_cache:
+          paths:
+            - node_modules
+            - ~/.cache/yarn
+          key: v1-yarn-dependencies-{{ checksum "yarn.lock" }}
+
+      - persist_to_workspace:
+          root: ~/app-deploy
+          paths:
+            - node_modules
+            - .
+            - .env
+
   build-android:
     executor: android-executor
     steps:
