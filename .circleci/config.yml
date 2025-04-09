@@ -15,25 +15,6 @@ jobs:
             - v1-yarn-dependencies-
 
       - run:
-          name: Install AWS CLI and jq
-          command: |
-            sudo apt-get update && sudo apt-get install -y awscli jq
-
-      - run:
-          name: Fetch Environment Variables from AWS Secrets Manager
-          command: |
-            aws secretsmanager get-secret-value \
-              --secret-id $AWS_SECRET_NAME \
-              --region $AWS_REGION \
-              --query SecretString \
-              --output text > secrets.json
-            jq -r 'to_entries | .[] | "\(.key)=\(.value)"' secrets.json > ~/app-deploy/.env
-
-      - run:
-          name: Export Environment Variables
-          command: cat ~/app-deploy/.env >> $BASH_ENV
-
-      - run:
           name: Install Yarn Dependencies
           command: yarn install --frozen-lockfile
 
@@ -48,56 +29,67 @@ jobs:
           paths:
             - node_modules
             - .
-            - .env
 
-  build-android:
-    executor: android-executor
+  android-build-and-test:
+    working_directory: ~/app-deploy/android
+    docker:
+      - image: cimg/android:2024.07.1-node
+    resource_class: large
+
     steps:
-      - checkout
+      - checkout:
+          path: ~/app-deploy
 
-      - run:
-          name: Install Node.js via nvm
-          command: |
-            export NVM_DIR="$HOME/.nvm"
-            source /usr/local/share/nvm/nvm.sh
-            nvm install 18
-            nvm use 18
-            node -v
-            npm -v
+      - attach_workspace:
+          at: ~/app-deploy
 
       - restore_cache:
           keys:
-            - v1-dependencies-{{ checksum "package-lock.json" }}
-            - v1-dependencies-
+            - v1-android-dependencies-{{ checksum "build.gradle" }}
+            - v1-android-dependencies-
 
       - run:
-          name: Install Node dependencies
+          name: Install Ninja and CMake (for native builds)
           command: |
-            export NVM_DIR="$HOME/.nvm"
-            source /usr/local/share/nvm/nvm.sh
-            nvm use 18
-            npm ci
+            sudo apt-get update
+            sudo apt-get install -y ninja-build cmake
 
       - run:
-          name: Install Java dependencies
-          command: ./gradlew dependencies
+          name: Fix Ruby permissions
+          command: |
+            sudo chown -R circleci:circleci /var/lib/gems /usr/local/bin && \
+            sudo chmod -R 755 /var/lib/gems /usr/local/bin
+
+      - run:
+          name: Install Fastlane Dependencies
+          command: bundle install
+
+      - run:
+          name: Run Fastlane Android Release
+          no_output_timeout: 20m
+          command: |
+            mkdir -p release
+            bundle exec fastlane android release
+            mv app/build/outputs/apk/release/app-release.apk release/app-release-$(echo $CIRCLE_BUILD_NUM).apk
+            mv app/build/outputs/bundle/release/app-release.aab release/app-release-$(echo $CIRCLE_BUILD_NUM).aab
+
+      - store_artifacts:
+          path: release
 
       - save_cache:
           paths:
             - ~/.gradle
-            - node_modules
-          key: v1-dependencies-{{ checksum "package-lock.json" }}
-
-      - run:
-          name: Build Android Release APK
-          command: cd android && ./gradlew assembleRelease
-
-      - store_artifacts:
-          path: android/app/build/outputs/apk/release/app-release.apk
-          destination: release-apk
+            - ~/.m2
+          key: v1-android-dependencies-{{ checksum "build.gradle" }}
 
 workflows:
-  version: 2
   build:
     jobs:
-      - build-android
+      - node
+      - android-build-and-test:
+          requires:
+            - node
+          filters:
+            branches:
+              only:
+                - main
