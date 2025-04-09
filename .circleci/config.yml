@@ -12,6 +12,16 @@ jobs:
     steps:
       - checkout
 
+      - run:
+          name: Install Node.js via nvm
+          command: |
+            export NVM_DIR="$HOME/.nvm"
+            source /usr/local/share/nvm/nvm.sh
+            nvm install 18
+            nvm use 18
+            node -v
+            npm -v
+
       - restore_cache:
           keys:
             - v1-dependencies-{{ checksum "package-lock.json" }}
@@ -19,7 +29,11 @@ jobs:
 
       - run:
           name: Install Node dependencies
-          command: npm ci
+          command: |
+            export NVM_DIR="$HOME/.nvm"
+            source /usr/local/share/nvm/nvm.sh
+            nvm use 18
+            npm ci
 
       - run:
           name: Install Java dependencies
